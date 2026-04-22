@@ -255,6 +255,22 @@ class BranchPredictor(SimObject):
     )
 
 
+class StaticBP(ConditionalPredictor):
+    type = "StaticBP"
+    cxx_class = "gem5::branch_prediction::StaticBP"
+    cxx_header = "cpu/pred/static.hh"
+
+    staticPredictionAlwaysTaken = Param.Bool(
+        False, "static prediction always taken"
+    )
+
+
+class StaticIndirectBP(IndirectPredictor):
+    type = "StaticIndirectBP"
+    cxx_class = "gem5::branch_prediction::StaticIndirectBP"
+    cxx_header = "cpu/pred/static.hh"
+
+
 class LocalBP(ConditionalPredictor):
     type = "LocalBP"
     cxx_class = "gem5::branch_prediction::LocalBP"

@@ -175,7 +175,7 @@ class Water_spatial(Process):
 
 
 class L1(Cache):
-    latency = args.l1latency
+    tag_latency = data_latency = args.l1latency
     mshrs = 12
     tgts_per_mshr = 8
 
@@ -186,7 +186,7 @@ class L1(Cache):
 
 
 class L2(Cache):
-    latency = args.l2latency
+    tag_latency = data_latency = args.l2latency
     mshrs = 92
     tgts_per_mshr = 16
     write_buffers = 8
@@ -198,18 +198,23 @@ class L2(Cache):
 
 busFrequency = Frequency(args.frequency)
 
+cpu_clk_domain = SrcClockDomain(
+    clock=args.cpu_clock, voltage_domain=system.cpu_voltage_domain
+)
+
 if args.timing:
     cpus = [
-        TimingSimpleCPU(cpu_id=i, clock=args.frequency)
+        TimingSimpleCPU(cpu_id=i, frequency=args.frequency)
         for i in range(args.numcpus)
     ]
 elif args.detailed:
     cpus = [
-        DerivO3CPU(cpu_id=i, clock=args.frequency) for i in range(args.numcpus)
+        DerivO3CPU(cpu_id=i, frequency=args.frequency)
+        for i in range(args.numcpus)
     ]
 else:
     cpus = [
-        AtomicSimpleCPU(cpu_id=i, clock=args.frequency)
+        AtomicSimpleCPU(cpu_id=i, frequency=args.frequency)
         for i in range(args.numcpus)
     ]
 
