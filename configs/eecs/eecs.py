@@ -8,7 +8,10 @@ from m5.objects import NULL
 from m5.util import addToPath
 
 addToPath("../")
-from common import ObjectList
+from common import (
+    ObjectList,
+    Simulation,
+)
 
 
 # List options
@@ -32,6 +35,58 @@ class ListPrefetcher(argparse.Action):
 
 
 # helpers
+
+
+def get_processes(args):
+    """Interprets provided args and returns a list of processes"""
+
+    multiprocesses = []
+    inputs = []
+    outputs = []
+    errouts = []
+    pargs = []
+
+    workloads = args.cmd.split(";")
+    for w in workloads:
+        if not os.path.exists(w):
+            fatal(f"Binary of workload not found: {w}")
+
+    if args.input != "":
+        inputs = args.input.split(";")
+    if args.output != "":
+        outputs = args.output.split(";")
+    if args.errout != "":
+        errouts = args.errout.split(";")
+    if args.options != "":
+        pargs = args.options.split(";")
+
+    idx = 0
+    for wrkld in workloads:
+        process = mo.Process(pid=100 + idx)
+        process.executable = wrkld
+        process.cwd = os.getcwd()
+        process.gid = os.getgid()
+
+        if args.env:
+            with open(args.env) as f:
+                process.env = [line.rstrip() for line in f]
+
+        if len(pargs) > idx:
+            process.cmd = [wrkld] + pargs[idx].split()
+        else:
+            process.cmd = [wrkld]
+
+        if len(inputs) > idx:
+            process.input = inputs[idx]
+        if len(outputs) > idx:
+            process.output = outputs[idx]
+        if len(errouts) > idx:
+            process.errout = errouts[idx]
+
+        multiprocesses.append(process)
+        idx += 1
+
+    return multiprocesses
 
 
 def fatal(msg: str):
@@ -341,14 +396,25 @@ def parse_args():
         help="List available hardware prefetchers.",
     )
 
+    p.add_argument("-i", "--input", default="", help="Read stdin from a file.")
+    p.add_argument("--output", default="", help="Redirect stdout to a file.")
+    p.add_argument("--errout", default="", help="Redirect stderr to a file.")
+    p.add_argument(
+        "-e",
+        "--env",
+        default="",
+        help="Initialize workload environment from text file.",
+    )
+
     return p.parse_args()
 
 
 def main():
     args = parse_args()
 
-    if not os.path.exists(args.cmd):
-        fatal(f"Binary of workload not found: {args.cmd}")
+    multiprocesses = []
+    multiprocesses = get_processes(args)
+    mp0_path = multiprocesses[0].executable
 
     # system
     system = mo.System()
@@ -359,8 +425,6 @@ def main():
     system.mem_mode = "timing"
     system.mem_ranges = [mo.AddrRange(args.mem_size)]
     system.cache_line_size = args.cacheline_size
-
-    system.workload = mo.SEWorkload.init_compatible(args.cmd)
 
     # Shared memory bus and L2 bus
     system.membus = mo.SystemXBar()
@@ -384,8 +448,6 @@ def main():
 
     # CPUs
     system.cpu = [create_cpu(args.cpu_type, i) for i in range(args.num_cpus)]
-
-    argv = [args.cmd] + shlex.split(args.options)
 
     for i, cpu in enumerate(system.cpu):
         # Per-core clock domain if you want it explicit
@@ -429,17 +491,20 @@ def main():
         cpu.createInterruptController()
 
         # SE workload: one process object per core
-        proc = mo.Process(pid=100 + i)
-        proc.cmd = list(argv)
 
-        cpu.workload = proc
+        if len(multiprocesses) == 1:
+            cpu.workload = multiprocesses[0]
+        else:
+            cpu.workload = multiprocesses[i]
         cpu.createThreads()
+
+    system.workload = mo.SEWorkload.init_compatible(mp0_path)
 
     root = mo.Root(full_system=False, system=system)
     m5.instantiate()
 
     print("Starting simulation")
-    print(f"  cmd               : {' '.join(argv)}")
+    print(f"  cmd               : {[p.cmd for p in multiprocesses]}")
     print(f"  cpu_type          : {args.cpu_type}")
     print(f"  num_cpus          : {args.num_cpus}")
     print(f"  cpu_clock         : {args.cpu_clock}")
