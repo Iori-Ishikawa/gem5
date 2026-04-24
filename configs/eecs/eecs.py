@@ -177,6 +177,7 @@ class L1ICache(mo.Cache):
     #
     is_read_only = True
     # 読み取り専用
+    sequential_access = False
 
     def __init__(self, size, assoc, prefetcher=NULL):
         super().__init__()
@@ -199,6 +200,7 @@ class L1DCache(mo.Cache):
     mshrs = 8
     tgts_per_mshr = 20
     write_buffers = 8
+    sequential_access = False
 
     def __init__(self, size, assoc, prefetcher=NULL):
         super().__init__()
@@ -215,17 +217,18 @@ class L1DCache(mo.Cache):
 
 
 class L2Cache(mo.Cache):
-    tag_latency = 10
-    data_latency = 10
-    response_latency = 10
+    response_latency = 1
     mshrs = 32
     tgts_per_mshr = 20
     write_buffers = 8
+    sequential_access = False
 
-    def __init__(self, size, assoc, prefetcher=NULL):
+    def __init__(self, size, assoc, latency, prefetcher=NULL):
         super().__init__()
         self.size = size
         self.assoc = assoc
+        self.tag_latency = latency
+        self.data_latency = latency
         if prefetcher != NULL:
             self.prefetcher = prefetcher
 
@@ -351,6 +354,13 @@ def parse_args():
     )
 
     p.add_argument(
+        "--l2-latency-cycles",
+        type=int,
+        default=10,
+        help="Latency of L2 cache in cycles",
+    )
+
+    p.add_argument(
         "--l1i-prefetcher",
         default="none",
         help="Type of hardware prefetcher for L1 instruction cache.",
@@ -435,6 +445,7 @@ def main():
     system.l2cache = L2Cache(
         size=args.l2_size,
         assoc=args.l2_assoc,
+        latency=args.l2_latency_cycles,
         prefetcher=make_prefetcher(args.l2_prefetcher),
     )
     system.l2cache.connect_cpu_side_bus(system.l2bus)
@@ -510,7 +521,7 @@ def main():
     print(f"  cpu_clock         : {args.cpu_clock}")
     print(f"  bp                : {args.bp}")
     print(
-        f"  supwerscalar      : {args.superscalar if args.superscalar != 0 else 4 if args.cpu_type.lower() == "o3" else 1}"
+        f"  superscalar       : {args.superscalar if args.superscalar != 0 else 4 if args.cpu_type.lower() == "o3" else 1}"
     )
     print(
         f"  L1I               : {args.l1i_size}, assoc={args.l1i_assoc}, pref={args.l1i_prefetcher}"
